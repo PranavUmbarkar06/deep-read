@@ -2,9 +2,9 @@ import json
 import os
 from google import genai
 from google.genai import types
-from extract import extract_text_from_pdf
 
-import logger
+#import logger
+
 MODEL=os.getenv("MODEL", "gemini-3.5-flash")  # Default to gemini-3.5-flash if not set
 # Simple evaluation wrapper
 def evaluate_summary(source_text: str, summary_text: str) -> dict:
@@ -44,7 +44,7 @@ def evaluate_summary(source_text: str, summary_text: str) -> dict:
             temperature=0.1 # Low temperature for more deterministic, factual evaluation
         )
     )
-    logger.log("Evaluated summary", f"Source Text Length: {len(source_text)} characters, Summary Length: {len(summary_text)} characters, Evaluation Result: {json.loads(response.text)['feedback']}")
+    #logger.log("Evaluated summary", f"Source Text Length: {len(source_text)} characters, Summary Length: {len(summary_text)} characters, Evaluation Result: {json.loads(response.text)['feedback']}")
     return json.loads(response.text)
 
 # Example Usage

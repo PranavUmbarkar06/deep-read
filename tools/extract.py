@@ -1,6 +1,6 @@
 import os
 from pypdf import PdfReader
-import logger
+
 def extract_text_from_pdf(pdf_path: str) -> str:
     """
     Extracts text from a PDF file structured by page.
@@ -22,5 +22,5 @@ def extract_text_from_pdf(pdf_path: str) -> str:
             extracted_text.append(f"--- PAGE {i+1} ---\n{page_text}")
             
     paper_text = "\n\n".join(extracted_text)
-    logger.log("Extracted text from PDF", f"PDF Path: '{pdf_path}', Extracted Text Length: {len(paper_text)} characters")
+    #logger.log("Extracted text from PDF", f"PDF Path: '{pdf_path}', Extracted Text Length: {len(paper_text)} characters")
     return paper_text

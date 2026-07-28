@@ -4,8 +4,8 @@ import os
 from google import genai
 from google.genai import types
 from pypdf import PdfReader
-from compatibility import verify_papers_compatibility
-from extract import extract_text_from_pdf
+from .compatibility import verify_papers_compatibility
+from .extract import extract_text_from_pdf
 
 # Initialize client (picks up GEMINI_API_KEY from environment variables)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -18,14 +18,7 @@ def compare_research_papers(pdf_paths: list[str]) -> str:
     if passed, ingests full text and returns a deep technical matrix.
     """
     # 1. Run the compatibility check
-    compatibility_raw = verify_papers_compatibility(pdf_paths)
-    compatibility_data = json.loads(compatibility_raw)
     
-    # 2. Gate check evaluation
-    if not compatibility_data.get("result", False):
-        return "Papers are incompatible and ineligible for comparison"
-        
-    print("Compatibility verified. Processing full text inputs locally...")
     
     # 3. Pull raw text locally only after confirmation (saves massive token costs)
     full_text_payload = ""

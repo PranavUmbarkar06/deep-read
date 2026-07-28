@@ -4,7 +4,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 from pypdf import PdfReader
-from extract import extract_text_from_pdf
+from .extract import extract_text_from_pdf
 import os
 from dotenv import load_dotenv
 load_dotenv()
