@@ -9,7 +9,7 @@ from .extract import extract_text_from_pdf
 
 # Initialize client (picks up GEMINI_API_KEY from environment variables)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL=os.getenv("MODEL", "gemini-3.5-flash")  # Default to gemini-3.5-flash if not set
+MODEL=os.getenv("MODEL", "gemini-2.5-flash")  # Default to gemini-2.5-flash if not set
 
 
 def compare_research_papers(pdf_paths: list[str]) -> str:

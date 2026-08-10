@@ -39,7 +39,7 @@ def summarize_comparison_matrix(comparison_matrix_text: str) -> str:
 
     try:
         response = client.models.generate_content(
-            model="gemini-3.5-flash",
+            model="gemini-2.5-flash",
             contents=f"Summarize this detailed research paper comparison matrix:\n\n{comparison_matrix_text}",
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,

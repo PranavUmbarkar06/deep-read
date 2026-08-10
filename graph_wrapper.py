@@ -1,23 +1,108 @@
 from structures.agent_state import Paper,AgentState
-from tools import find_papers,extract,critic,compatibility,compare_papers,summarize_comparison
+from tools import find_papers,extract,critic,compatibility,compare_papers,summarize_comparison,validator
 from langchain_core.tools import tool
-
+from typing import Literal, TypedDict, List, Optional
+from pydantic import BaseModel, Field
 import os
 from google import genai
 from google.genai import types
 from langgraph.types import interrupt
 
+from dotenv import load_dotenv
+
+load_dotenv()
 
  
+class OrchestratorDecision(BaseModel):
+    intent: Literal["discover", "summarize", "compare", "validate"] = Field(
+        description="The primary routing intent based on user query and context."
+    )
+    reasoning: str = Field(
+        description="Brief 1-sentence explanation of why this intent was selected."
+    )
+
+# ---------------------------------------------------------------------------
+# System Prompt with Edge Case Handling
+# ---------------------------------------------------------------------------
+ORCHESTRATOR_SYSTEM_PROMPT = """You are the intent classifier and router for an AI Research Assistant specializing in academic literature.
+Your task is to classify the incoming user query into exactly ONE of the following four intents:
+
+1. **discover**: Searching for new literature, exploring a domain, finding papers by topic/author/year, or asking for paper recommendations.
+2. **summarize**: Explaining, condensing, or breaking down key findings, methods, or takeaways from specific paper(s) or provided context/files.
+3. **compare**: Analyzing differences, similarities, tradeoffs, benchmark performance, or architectural choices across two or more papers, approaches, or models.
+4. **validate**: Fact-checking a claim against literature, inspecting methodology for flaws/assumptions, checking statistical rigor, or asking if a paper's results hold up.
+
+---
+### EDGE CASES & DISAMBIGUATION RULES:
+
+* **Rule 1: File Presence Priority**
+  - If files/papers are attached AND the query is general (e.g., "What is this about?", "Key takeaways?"), default to **`summarize`**.
+  - If files are attached AND the query explicitly asks to evaluate claims, assumptions, or mathematical proofs inside them, route to **`validate`**.
+  - If files are attached AND the query asks to evaluate them against another paper or benchmark, route to **`compare`**.
+
+* **Rule 2: Multi-Intent Disambiguation**
+  - If query asks to "find papers on X and summarize them", priority goes to **`discover`** first because papers must be found before they can be summarized.
+  - If query asks to "compare Paper A and Paper B, then summarize the winner", route to **`compare`**.
+
+* **Rule 3: Ambiguous or Short Queries**
+  - Short keyword searches (e.g., "Attention mechanism", "ResNet vs ViT") -> route "Attention mechanism" to **`discover`**, route "ResNet vs ViT" to **`compare`**.
+  - Queries challenging validity (e.g., "Is p-hacking present here?", "Does this paper actually prove X?") -> **`validate`**.
+
+* **Rule 4: Default Fallback**
+  - If the query is vague but mentions finding relevant work -> **`discover`**.
+"""
+
+# ---------------------------------------------------------------------------
+# Orchestrator Node Function
+# ---------------------------------------------------------------------------
 def orchestrator(state: AgentState) -> dict:
     """
-    Phase 1: hardcoded to 'discover'. Real version (phase 2) will use an LLM call
-    to classify intent + detect whether files are attached, per the router design
-    from earlier in the conversation.
+    Classifies user intent for research paper processing using Gemini.
+    Returns a state update dictionary containing the detected intent and reasoning.
     """
-    print(f"[orchestrator] routing query: {state['query']!r}")
-    return {"intent": "summarize"}
+    query = state.get("query", "")
+    attached_files = state.get("attached_files", [])
 
+    # Format contextual information for the prompt
+    context_str = f"User Query: {query!r}\n"
+    if attached_files:
+        context_str += f"Attached Files/Papers ({len(attached_files)}): {', '.join(attached_files)}\n"
+    else:
+        context_str += "Attached Files/Papers: None\n"
+
+    # Initialize Gemini client
+    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",  # Update to target Flash model identifier
+            contents=context_str,
+            config=types.GenerateContentConfig(
+                system_instruction=ORCHESTRATOR_SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                response_schema=OrchestratorDecision,
+                temperature=0.0,  # Zero temperature for deterministic classification
+            ),
+        )
+
+        # Parse structured output
+        decision: OrchestratorDecision = response.parsed
+        
+        print(f"[orchestrator] Query: {query!r} -> Intent: {decision.intent} ({decision.reasoning})")
+        
+        return {
+            "intent": decision.intent,
+            "router_reasoning": decision.reasoning
+        }
+
+    except Exception as e:
+        # Fallback edge-case handler in case of API issues
+        print(f"[orchestrator] API Call failed: {e}. Falling back to default routing.")
+        default_intent = "summarize" if attached_files else "discover"
+        return {
+            "intent": default_intent,
+            "router_reasoning": "Fallback trigger due to execution error."
+        }
 
 
  
@@ -206,7 +291,7 @@ def summarise_paper_node(state: AgentState) -> dict:
     """
 
     response = client.models.generate_content(
-        model="gemini-3.5-flash",
+        model="gemini-2.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             temperature=0.1,
@@ -333,3 +418,36 @@ def summarize_comparison_node(state: AgentState) -> dict:
 
 
 #validate
+
+def validate_and_query(state: AgentState) -> dict:
+    session_id = state.get("session_id", "default_session")
+    pdf_paths = state.get("pdf_paths", [])
+    query = state.get("query", "")
+
+    # Instantiate validator with session_id
+    agent = validator.ScientificHypothesisValidator(db_path=session_id)
+
+    # Index papers
+    for paper in pdf_paths:
+        # Note: pass both pdf path and a title/identifier if required by add_paper
+        agent.add_paper(paper, paper_title=paper)
+
+    # Run validation step
+    analysis: validator.HypothesisAnalysis = agent.validate_hypothesis(
+        session_id=session_id, hypothesis=query
+    )
+
+    return {
+        "validate_result": analysis.model_dump(),  # Convert Pydantic model to dict
+        "session_id": session_id,
+        "query": query,
+    }
+
+
+if __name__ == '__main__':
+    
+    print(orchestrator({
+
+        "query": "show some papers optimization algorithms like GA, ACO, PSO",
+
+    }))

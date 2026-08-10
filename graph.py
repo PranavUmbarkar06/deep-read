@@ -19,7 +19,8 @@ from graph_wrapper import (
     compare_router,
     summarize_comparison_node,
     compare_papers_node,
-    compatibility_node
+    compatibility_node,
+    validate_and_query
 )
 
 def build_graph():
@@ -43,6 +44,9 @@ def build_graph():
     builder.add_node("compare_papers", compare_papers_node)
     builder.add_node("summarize_comparison", summarize_comparison_node)
 
+    #validator node
+    builder.add_node("validate_and_query", validate_and_query)
+
     # Virtual Router Node for Compare Branch
     builder.add_node("compare_router_node", lambda state: state)
 
@@ -57,7 +61,7 @@ def build_graph():
             "summarize": "check_pdf_input_node",
             "discover": "set_papers",
             "compare": "compare_router_node",
-            "validate": END
+            "validate": "set_papers"
         }
     )
 
@@ -78,7 +82,7 @@ def build_graph():
         {
             "discover": "display_papers",
             "compare": "check_compatibility",
-               # Corrected target node name
+            "validate":"validate_and_query"   # Corrected target node name
         }
     )
 
@@ -140,21 +144,21 @@ def build_graph():
 
 if __name__ == "__main__":
 
-    app = build_graph()
+    graph = build_graph()
 
 
 
-    # result = graph.invoke({
+    result = graph.invoke({
 
-    #     "query": "optimization algorithms like GA, ACO, PSO",
+        "query": "can you find some papers about game theory?"
 
-    # })
+    })
 
 
 
-    # print("\n--- final state ---")
+    
 
-    # print(result["final_message"])
+    print(result)
 
 
 
@@ -166,4 +170,4 @@ if __name__ == "__main__":
 
     # print("\n--- mermaid source ---")
 
-    print(app.get_graph().draw_mermaid())
+    

@@ -8,7 +8,7 @@ import logger
 from critic import evaluate_summary
 
 load_dotenv()
-MODEL=os.getenv("MODEL", "gemini-3.5-flash")  # Default to gemini-3.5-flash if not set
+MODEL=os.getenv("MODEL", "gemini-2.5-flash")  # Default to gemini-2.5-flash if not set
 def summarise(pdf_path: str,feedback: list=None,max_iterations:int=1) -> str:
 
     """

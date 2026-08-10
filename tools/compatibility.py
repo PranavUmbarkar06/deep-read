@@ -11,7 +11,7 @@ load_dotenv()
 
 # Initialize client (automatically detects GEMINI_API_KEY from env)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL=os.getenv("MODEL", "gemini-3.5-flash")  # Default to gemini-3.5-flash if not set
+MODEL=os.getenv("MODEL", "gemini-2.5-flash")  # Default to gemini-2.5-flash if not set
 class CompatibilityResult(BaseModel):
     result: bool = Field(
         alias="compatible", # Maps internally to handle your required final key

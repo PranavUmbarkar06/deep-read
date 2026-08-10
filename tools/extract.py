@@ -24,3 +24,8 @@ def extract_text_from_pdf(pdf_path: str) -> str:
     paper_text = "\n\n".join(extracted_text)
     #logger.log("Extracted text from PDF", f"PDF Path: '{pdf_path}', Extracted Text Length: {len(paper_text)} characters")
     return paper_text
+
+
+
+if __name__ == '__main__':
+    extract_text_from_pdf("../downloaded_papers/test2.pdf")

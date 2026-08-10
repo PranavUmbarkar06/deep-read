@@ -7,7 +7,7 @@ from google import genai
 from google.genai import types
 
 # Import your extraction function
-from extract import extract_text_from_pdf
+from .extract import extract_text_from_pdf
 from dotenv import load_dotenv
 load_dotenv()
 # 1. Define the rigorous evaluation schema
@@ -153,7 +153,7 @@ class ScientificHypothesisValidator:
 
         # 3. Request analytical validation from Gemini 3.5 Flash
         response = self.client.models.generate_content(
-            model="gemini-3.5-flash",
+            model="gemini-2.5-flash",
             contents=[user_prompt],
             config=types.GenerateContentConfig(
                 system_instruction=(

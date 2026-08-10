@@ -5,7 +5,7 @@ from google.genai import types
 
 #import logger
 
-MODEL=os.getenv("MODEL", "gemini-3.5-flash")  # Default to gemini-3.5-flash if not set
+MODEL=os.getenv("MODEL", "gemini-2.5-flash")  # Default to gemini-2.5-flash if not set
 # Simple evaluation wrapper
 def evaluate_summary(source_text: str, summary_text: str) -> dict:
     # Initialize client (picks up GEMINI_API_KEY from environment)

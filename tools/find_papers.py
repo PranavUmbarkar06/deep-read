@@ -24,7 +24,7 @@ def find_keywords(user_query: str) -> list[str]:
     """
 
     response = client.models.generate_content(
-        model='gemini-3.5-flash',
+        model='gemini-2.5-flash',
         contents=prompt,
         config={'response_mime_type': 'application/json'}
     )
