@@ -67,6 +67,34 @@ def fetch_papers(keywords: list[str], max_papers_per_keyword: int = 1) -> list[a
 
     return raw_results
 
+import urllib.request
+
+def download_paper_pdf(result: arxiv.Result, save_dir: str) -> str:
+    """
+    Downloads the PDF for an arxiv.Result object into save_dir and returns the local file path.
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    paper_id = result.entry_id.split('/')[-1].replace('/', '_')
+    filename = f"{paper_id}.pdf"
+    file_path = os.path.join(save_dir, filename)
+    
+    if os.path.exists(file_path):
+        return file_path
+        
+    try:
+        url = result.pdf_url or f"https://arxiv.org/pdf/{paper_id}.pdf"
+        if not url.endswith(".pdf") and "arxiv.org/pdf" in url:
+            url += ".pdf"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response, open(file_path, 'wb') as out_file:
+            out_file.write(response.read())
+        return file_path
+    except Exception as e:
+        print(f"Error downloading PDF for paper {result.entry_id}: {e}")
+        return ""
+
+
+
 
 if __name__ == "__main__":
     query = "How do we make Large Language Models more efficient for edge devices?"

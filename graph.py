@@ -150,7 +150,7 @@ if __name__ == "__main__":
 
     result = graph.invoke({
 
-        "query": "can you find some papers about game theory?"
+        "query": "can you compare a few optimisation algorithms like ga,pso and aco?"
 
     })
 

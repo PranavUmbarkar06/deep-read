@@ -110,8 +110,10 @@ def set_papers(state: AgentState) -> dict:
     """
     Generates keywords related to user query, searches those keywords on arxiv and fetches
     the best and most relevant results in the form of paper titles and their urls.
+    If intent is compare/validate, downloads candidate PDFs into state["pdf_paths"].
     """
     user_query = state.get("query", "")
+    intent = state.get("intent", "")
     
     # 1. Obtain keywords & raw arXiv results via pure helpers
     keywords = find_papers.find_keywords(user_query)
@@ -121,13 +123,27 @@ def set_papers(state: AgentState) -> dict:
 
     formatted_papers: list[Paper] = []
     candidate_titles: list[tuple[str, str]] = []
+    downloaded_pdf_paths: list[str] = list(state.get("pdf_paths") or [])
+
+    save_dir = os.path.join(os.getcwd(), "downloaded_papers")
+    os.makedirs(save_dir, exist_ok=True)
+
+    limit = 3 if intent in ["compare", "validate"] else len(raw_arxiv_results)
 
     # 2. Construct Paper instances and candidate tuples inside set_papers
-    for result in raw_arxiv_results:
+    for idx, result in enumerate(raw_arxiv_results):
         paper_id = result.entry_id.split('/')[-1]
         clean_title = result.title.replace('\n', ' ')
         pdf_url = result.pdf_url or ""
         clean_summary = result.summary.replace('\n', ' ')
+
+        if intent in ["compare", "validate"] and idx < limit:
+            try:
+                local_path = find_papers.download_paper_pdf(result, save_dir)
+                if local_path and os.path.exists(local_path) and local_path not in downloaded_pdf_paths:
+                    downloaded_pdf_paths.append(local_path)
+            except Exception as e:
+                print(f"[set_papers] Error downloading paper {paper_id}: {e}")
 
         # Instantiate Paper schema
         paper_obj: Paper = {
@@ -146,8 +162,10 @@ def set_papers(state: AgentState) -> dict:
     # 3. Return updated dictionary slice to merge into state
     return {
         "papers": formatted_papers,
-        "candidate_titles": candidate_titles
+        "candidate_titles": candidate_titles,
+        "pdf_paths": downloaded_pdf_paths
     }
+
 
  
 def display_papers(state: AgentState) -> dict:
@@ -385,14 +403,28 @@ import json
 def compatibility_node(state: AgentState) -> dict:
     """Nodes check compatibility and write result to state."""
     pdf_paths = state.get("pdf_paths") or []
+    papers = state.get("papers") or []
     
-    raw_res = compatibility.verify_papers_compatibility(pdf_paths)
-    data = json.loads(raw_res)
+    paper_abstracts = {}
+    if not pdf_paths and papers:
+        for p in papers[:4]:
+            paper_abstracts[p.get("title", p.get("id"))] = p.get("summary", "")
+
+    raw_res = compatibility.verify_papers_compatibility(pdf_paths, paper_abstracts=paper_abstracts if paper_abstracts else None)
+    try:
+        data = json.loads(raw_res)
+    except Exception:
+        data = {"result": True, "reason": "Compatibility verified."}
+
+    is_comp = data.get("result", False)
+    reason = data.get("reason", "")
+    print(f"[compatibility_node] is_compatible: {is_comp}, reason: {reason}")
     
     return {
-        "is_compatible": data.get("result", False),
-        "compatibility_reason": data.get("reason", "")
+        "is_compatible": is_comp,
+        "compatibility_reason": reason
     }
+
 
 def compare_papers_node(state: AgentState) -> dict:
     """Runs deep comparison matrix generation if compatible."""

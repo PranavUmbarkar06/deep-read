@@ -2,3 +2,6 @@
 .env
 /tools/logs.txt
 /downloaded_files/
+/downloaded_papers/
+__pycache__/
+*.pyc
