@@ -32,11 +32,14 @@ def find_keywords(user_query: str) -> list[str]:
     try:
         keywords = json.loads(response.text)
         if isinstance(keywords, list):
+            if user_query not in keywords:
+                keywords.insert(0, user_query)
             return keywords
     except json.JSONDecodeError:
         pass
     
     return [user_query]
+
 
 def fetch_papers(keywords: list[str], max_papers_per_keyword: int = 1) -> list[arxiv.Result]:
     """
@@ -48,9 +51,11 @@ def fetch_papers(keywords: list[str], max_papers_per_keyword: int = 1) -> list[a
     raw_results: list[arxiv.Result] = []
 
     for kw in keywords:
-        search_query = f'all:"{kw}"'
+        clean_kw = kw.replace('"', '').strip()
+        if not clean_kw:
+            continue
         search = arxiv.Search(
-            query=search_query,
+            query=clean_kw,
             max_results=max_papers_per_keyword,
             sort_by=arxiv.SortCriterion.Relevance
         )
@@ -63,9 +68,10 @@ def fetch_papers(keywords: list[str], max_papers_per_keyword: int = 1) -> list[a
                     seen_ids.add(paper_id)
                     raw_results.append(res)
         except Exception as e:
-            print(f"Error searching arXiv for keyword '{kw}': {e}")
+            print(f"Error searching arXiv for keyword '{clean_kw}': {e}")
 
     return raw_results
+
 
 import urllib.request
 
