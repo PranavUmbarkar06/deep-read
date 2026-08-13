@@ -91,6 +91,7 @@ def chat():
     data = request.json or {}
     query = data.get('query', '')
     pdf_paths = data.get('pdf_paths', [])
+    thread_id = data.get('thread_id', 'default-session')  # or generate a uuid per browser session
 
     if not query:
         return jsonify({'error': 'Query string is required'}), 400
@@ -100,13 +101,18 @@ def chat():
             "query": query,
             "pdf_paths": pdf_paths
         }
-        
-        result = graph.invoke(state_input)
+
+        config = {"configurable": {"thread_id": thread_id}}
+        result = graph.invoke(state_input, config)
+        interrupt_payload = result.get("__interrupt__")
+        interrupt_message = None
+        if interrupt_payload:
+            interrupt_message = interrupt_payload[0].value if hasattr(interrupt_payload[0], "value") else str(interrupt_payload[0])
         
         return jsonify({
             'intent': result.get('intent'),
             'router_reasoning': result.get('router_reasoning'),
-            'final_message': result.get('final_message'),
+            'final_message': interrupt_message or result.get('final_message'),
             'papers': result.get('papers', []),
             'candidate_titles': result.get('candidate_titles', []),
             'is_compatible': result.get('is_compatible'),
@@ -121,4 +127,3 @@ def chat():
 if __name__ == '__main__':
     print("[Deep Read] Starting Flask Server on http://127.0.0.1:5000 ...")
     app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False)
-

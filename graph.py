@@ -47,7 +47,7 @@ def build_graph():
     builder.add_node("compare_papers", compare_papers_node)
     builder.add_node("summarize_comparison", summarize_comparison_node)
 
-    #validator node
+    # Validator node
     builder.add_node("validate_and_query", validate_and_query)
 
     # Virtual Router Node for Compare Branch
@@ -64,7 +64,7 @@ def build_graph():
             "summarize": "check_pdf_input_node",
             "discover": "set_papers",
             "compare": "compare_router_node",
-            "validate": "set_papers" #problem problem
+            "validate": "set_papers"
         }
     )
 
@@ -74,11 +74,12 @@ def build_graph():
         compare_router,
         {
             "ask_upload": "ask_compare_upload",
-            "uploaded": "check_compatibility"  # Directed to compatibility check
+            "uploaded": "check_compatibility"
         }
     )
-    builder.add_edge("ask_compare_upload", END)
-
+    
+    # FIX 1: Point ask_compare_upload to check_compatibility instead of END
+    builder.add_edge("ask_compare_upload", "check_compatibility")
 
     # 5. Set Papers Routing
     builder.add_conditional_edges(
@@ -87,7 +88,7 @@ def build_graph():
         {
             "discover": "display_papers",
             "compare": "check_compatibility",
-            "validate":"validate_and_query"   # Corrected target node name
+            "validate": "validate_and_query"
         }
     )
 
@@ -143,51 +144,35 @@ def build_graph():
     builder.add_edge("summarize_comparison", END)
 
     checkpointer = MemorySaver()
-    return builder.compile(checkpointer=checkpointer)
     
-
-
-
+    # FIX 2: Interrupt BEFORE downstream processing nodes so state updates cleanly pause execution
+    return builder.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["check_compatibility", "extract_formatted"]
+    )
 
 if __name__ == "__main__":
     graph = build_graph()
-    
-    # Thread ID tracks the state for a specific user session
     config = {"configurable": {"thread_id": "test_session_101"}}
 
-    print("==========================================")
-    print("STEP 1: User requests comparison without uploading PDFs")
-    print("==========================================")
-    
     initial_input = {
-        "query": "Compare these papers for me",
-        "pdf_paths": []  # Empty array triggers ask_upload routing
+        "query": "find some papers about attention in transformers",
+        "pdf_paths": []
     }
     
-    # Run graph - expected to stop after ask_compare_upload
+    print("--- Step 1: Initial Run ---")
     res1 = graph.invoke(initial_input, config)
     
-    # Verify current state
     current_state = graph.get_state(config)
-    print("\n[State Check after Step 1]:")
-    print(f"Next Nodes to Execute: {current_state.next}")  # Should be empty or pointing to next pending step
-    print(f"Current Intent: {current_state.values.get('intent')}")
+    print("Next nodes waiting to run:", current_state.next)
 
-    print("\n==========================================")
-    print("STEP 2: User provides PDF paths and resumes execution")
-    print("==========================================")
-
-    # Update state with the uploaded files as if user attached them
+    print("\n--- Step 2: Update State & Resume ---")
+    # Mutate state to supply the required uploaded files
     graph.update_state(
         config,
-        {
-            "pdf_paths": ["downloaded_papers/paper1.pdf", "downloaded_papers/paper2.pdf"],
-            "intent": "compare" # Keep intent persistent
-        }
+        {"pdf_paths": ["downloaded_papers/paper1.pdf", "downloaded_papers/paper2.pdf"]}
     )
 
-    # Passing None re-invokes the graph from where it paused
+    # Resume graph execution
     final_result = graph.invoke(None, config)
-
-    print("\n[Final Output]:")
-    print(final_result)
+    print("\n[Final State Values]:", final_result)

@@ -19,6 +19,7 @@ class AgentState(TypedDict, total=False):
     session_id: str 
     query: str
     intent: Literal["discover", "summarize", "compare", "validate"]
+    router_reasoning: str
     candidate_titles: List[Tuple[str, str]]  # list of (title, url) tuples
     papers: List[Paper]                       # output of fetch_papers
     final_message: str

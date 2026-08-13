@@ -12,13 +12,13 @@ def find_keywords(user_query: str) -> list[str]:
     Pure utility: Generates search keywords from a user query string.
     """
     prompt = f"""
-    The user is looking for academic research papers related to: "{user_query}"
-    
-    Generate a JSON list containing 10 to 15 precise academic keywords, subtopics, 
-    or search phrases suitable for querying arXiv.
-    
-    Return ONLY a JSON object like this:
-    {"keywords": ["keyword 1", "keyword 2", "keyword 3"]}
+        The user is looking for academic research papers related to: "{user_query}"
+        
+        Generate a JSON list containing 10 to 15 precise academic keywords, subtopics, 
+        or search phrases suitable for querying arXiv.
+        
+        Return ONLY a JSON object like this:
+        "keywords": ["keyword 1", "keyword 2", "keyword 3"]
     """
 
     response_text = generate_json(

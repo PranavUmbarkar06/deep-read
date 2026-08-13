@@ -60,7 +60,15 @@ def orchestrator(state: AgentState) -> dict:
     Returns a state update dictionary containing the detected intent and reasoning.
     """
     query = state.get("query", "")
-    attached_files = state.get("attached_files", [])
+    pdf_paths = state.get("pdf_paths", []) or []
+    attached_files = state.get("attached_files", []) or pdf_paths
+    query_lower = query.lower()
+
+    if not attached_files and any(term in query_lower for term in ["summarize", "summarise", "summary"]):
+        return {
+            "intent": "summarize",
+            "router_reasoning": "The query asks to summarize a specific paper, but no PDF is attached."
+        }
 
     # Format contextual information for the prompt
     context_str = f"User Query: {query!r}\n"
