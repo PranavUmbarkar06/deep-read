@@ -3,8 +3,7 @@ import uuid
 from typing import List, Dict
 from pydantic import BaseModel, Field
 import chromadb
-from google import genai
-from google.genai import types
+from .azure_openai_client import generate_embedding, generate_json
 
 # Import your extraction function
 from .extract import extract_text_from_pdf
@@ -28,39 +27,31 @@ class HypothesisAnalysis(BaseModel):
         description="Actionable advice to improve or patch the researcher's proposed idea."
     )
 
-ABSOLUTE_PATH="../database/vector_database/"
+DB_ROOT_DIR = os.path.join(os.getcwd(), "database", "vector_database")
+os.makedirs(DB_ROOT_DIR, exist_ok=True)
+
 class ScientificHypothesisValidator:
-    def __init__(self, db_path: str=f"NewDB", collection_name: str = "papers_collection"):
+    def __init__(self, db_path: str = "default_db", collection_name: str = "papers_collection"):
         """
-        Initializes the Gemini Client, persistent ChromaDB client, and session history.
+        Initializes persistent ChromaDB client and session history.
         """
-        # Initialize Gemini Client (requires GEMINI_API_KEY env variable)
-        self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-        
-        # Initialize Persistent Vector Database
-        self.chroma_client = chromadb.PersistentClient(path=db_path)
+        target_path = os.path.join(DB_ROOT_DIR, db_path)
+        os.makedirs(target_path, exist_ok=True)
+        self.db_path = target_path
+
+        self.chroma_client = chromadb.PersistentClient(path=self.db_path)
         self.collection = self.chroma_client.get_or_create_collection(
             name=collection_name,
             metadata={"hnsw:space": "cosine"}
         )
-        self.db_path=ABSOLUTE_PATH+db_path
-        
-        # Session state: session_id -> list of message dictionaries
         self.sessions: Dict[str, List[Dict[str, str]]] = {}
-        
 
     def _get_embedding(self, text: str) -> List[float]:
-        """Generates native vector embeddings using gemini-embedding-001."""
-        response = self.client.models.embed_content(
-            model="gemini-embedding-001",
-            contents=text
-        )
-        if isinstance(response.embeddings, list):
-            return response.embeddings[0].values
-        return response.embedding.values
+        """Generates Azure OpenAI vector embeddings."""
+        return generate_embedding(text)
 
     def _chunk_text(self, text: str, chunk_size: int = 1200, overlap: int = 250) -> List[str]:
-        """Splits raw paper text into overlapping chunks while preserving page headers."""
+        """Splits raw paper text into overlapping chunks."""
         chunks = []
         start = 0
         text_len = len(text)
@@ -75,12 +66,20 @@ class ScientificHypothesisValidator:
 
     def add_paper(self, pdf_path: str, paper_title: str) -> bool:
         """
-        Extracts PDF text, chunks it, and writes it to the Vector database.
-        Returns True if successful, False if extraction failed/limit hit.
+        Extracts PDF text, chunks it, and writes it to Vector database.
+        Prevents duplicate indexing if paper is already in collection.
         """
+        if not os.path.exists(pdf_path):
+            print(f"File not found: {pdf_path}")
+            return False
+
+        # Deduplication check
+        existing = self.collection.get(where={"source_title": paper_title}, limit=1)
+        if existing and existing.get("ids"):
+            print(f"Paper '{paper_title}' already indexed in vector database.")
+            return True
+
         raw_text = extract_text_from_pdf(pdf_path)
-        
-        # Check if the extraction utility returned the error message
         if raw_text.startswith("Paper is too long"):
             print(f"Error indexing '{paper_title}': {raw_text}")
             return False
@@ -111,33 +110,35 @@ class ScientificHypothesisValidator:
             documents=documents
         )
         
-        print(f"Indexed '{paper_title}': Successfully stored {len(chunks)} text chunks.")
+        print(f"Indexed '{paper_title}': Stored {len(chunks)} text chunks.")
         return True
 
     def validate_hypothesis(self, session_id: str, hypothesis: str) -> HypothesisAnalysis:
         """
-        Retrieves top-4 matches, evaluates the researcher's theory contextually,
-        updates the session's conversational history, and returns structured JSON analysis.
+        Retrieves top matches, evaluates hypothesis against literature,
+        and returns structured analysis.
         """
         if session_id not in self.sessions:
             self.sessions[session_id] = []
 
-        # 1. Retrieve the top 4 most relevant chunks
-        query_vector = self._get_embedding(hypothesis)
-        search_results = self.collection.query(
-            query_embeddings=[query_vector],
-            n_results=4
-        )
-        
-        retrieved_documents = search_results.get("documents", [[]])[0]
-        retrieved_metadata = search_results.get("metadatas", [[]])[0]
-        
         context_block = ""
-        for i, (doc, meta) in enumerate(zip(retrieved_documents, retrieved_metadata)):
-            source = meta.get("source_title", "Unknown Source")
-            context_block += f"\n--- Baseline Paper: {source} (Chunk {meta.get('chunk_index')}) ---\n{doc}\n"
+        count = self.collection.count()
+        if count > 0:
+            query_vector = self._get_embedding(hypothesis)
+            search_results = self.collection.query(
+                query_embeddings=[query_vector],
+                n_results=min(4, count)
+            )
+            
+            retrieved_documents = search_results.get("documents", [[]])[0]
+            retrieved_metadata = search_results.get("metadatas", [[]])[0]
+            
+            for i, (doc, meta) in enumerate(zip(retrieved_documents, retrieved_metadata)):
+                source = meta.get("source_title", "Unknown Source")
+                context_block += f"\n--- Baseline Paper: {source} (Chunk {meta.get('chunk_index')}) ---\n{doc}\n"
+        else:
+            context_block = "No PDF research papers currently indexed in session vector store."
 
-        # 2. Re-compile previous conversation history
         history_context = ""
         if self.sessions[session_id]:
             history_context = "### Previous Conversation History:\n"
@@ -151,30 +152,49 @@ class ScientificHypothesisValidator:
             f"### Researcher's Proposed Theory / Doubt:\n{hypothesis}"
         )
 
-        # 3. Request analytical validation from Gemini 3.5 Flash
-        response = self.client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[user_prompt],
-            config=types.GenerateContentConfig(
-                system_instruction=(
-                    "You are an elite, highly pragmatic scientific peer reviewer and collaborative research partner. "
-                    "The researcher is proposing a new theory, optimization, or extension built on top of the baseline paper.\n\n"
-                    "Your job is NOT to look for direct keyword matches. Instead, use your deep logical, mathematical, "
-                    "and structural reasoning to test the soundness of the researcher's proposal. "
-                    "Identify structural logic flaws, point out edge cases, analyze performance/complexity impacts, "
-                    "and suggest modifications to help patch their theory."
-                ),
-                response_mime_type="application/json",
-                response_schema=HypothesisAnalysis,
-                temperature=0.2  # Keep deterministic but allow logical deductive reasoning
-            )
+        response_text = generate_json(
+            user_prompt,
+            system_instruction=(
+                "You are an elite scientific peer reviewer. Your task is to evaluate the researcher's proposal "
+                "against literature context. Identify logical flaws, edge cases, performance trade-offs, and refinements."
+            ),
+            schema=HypothesisAnalysis,
+            schema_name="HypothesisAnalysis",
+            temperature=0.2,
         )
 
-        # Update Session History
         self.sessions[session_id].append({"role": "user", "content": hypothesis})
-        self.sessions[session_id].append({"role": "assistant", "content": response.text})
+        self.sessions[session_id].append({"role": "assistant", "content": response_text})
 
-        return HypothesisAnalysis.model_validate_json(response.text)
+        return HypothesisAnalysis.model_validate_json(response_text)
+
+def format_analysis_markdown(analysis: HypothesisAnalysis) -> str:
+    """Formats HypothesisAnalysis Pydantic model into structured Markdown text."""
+    verdict_emoji = {
+        "LOGICALLY_SOUND": "✅ **LOGICALLY SOUND**",
+        "FLAWED": "⚠️ **FLAWED (Logical / Algorithmic Loophole Detected)**",
+        "INCOMPATIBLE": "❌ **INCOMPATIBLE (Violates Baseline Mechanics)**",
+        "NEED_CLARIFICATION": "❓ **NEEDS CLARIFICATION**"
+    }.get(analysis.verdict, f"**{analysis.verdict}**")
+
+    md = f"### Scientific Hypothesis Validation Analysis\n\n"
+    md += f"**Overall Verdict**: {verdict_emoji}\n\n"
+    md += f"#### 🧬 Baseline Paper Compatibility\n{analysis.compatibility_with_paper}\n\n"
+    md += f"#### 📐 Structural & Logical Analysis\n{analysis.structural_analysis}\n\n"
+
+    if analysis.potential_bottlenecks:
+        md += f"#### ⚠️ Potential Bottlenecks & Edge Cases\n"
+        for item in analysis.potential_bottlenecks:
+            md += f"- {item}\n"
+        md += "\n"
+
+    if analysis.suggested_refinements:
+        md += f"#### 💡 Suggested Refinements & Modifications\n"
+        for item in analysis.suggested_refinements:
+            md += f"- {item}\n"
+
+    return md
+
     
 
 

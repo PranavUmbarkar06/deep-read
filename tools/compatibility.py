@@ -1,27 +1,11 @@
 # compatibility.py
 import json
-from google import genai
-from google.genai import types
-from pydantic import BaseModel, Field
-from pypdf import PdfReader
-from .extract import extract_text_from_pdf
-import os
-from dotenv import load_dotenv
-load_dotenv()
-
-# Initialize client (automatically detects GEMINI_API_KEY from env)
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL=os.getenv("MODEL", "gemini-2.5-flash")  # Default to gemini-2.5-flash if not set
 from pydantic import BaseModel, Field, ConfigDict
-from pypdf import PdfReader
 from .extract import extract_text_from_pdf
+from .azure_openai_client import generate_json
 import os
 from dotenv import load_dotenv
 load_dotenv()
-
-# Initialize client (automatically detects GEMINI_API_KEY from env)
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL=os.getenv("MODEL", "gemini-2.5-flash")  # Default to gemini-2.5-flash if not set
 
 class CompatibilityResult(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -38,7 +22,7 @@ class CompatibilityResult(BaseModel):
 
 def verify_papers_compatibility(pdf_paths: list[str], paper_abstracts: dict[str, str] = None) -> str:
     """
-    Main entry point: Extracts abstracts locally or uses paper_abstracts, sends them to Gemini 2.5 Flash,
+    Main entry point: Extracts abstracts locally or uses paper_abstracts, sends them to Azure OpenAI,
     and returns a clean JSON string matching the required schema.
     """
     if len(pdf_paths) > 4:
@@ -84,24 +68,21 @@ def verify_papers_compatibility(pdf_paths: list[str], paper_abstracts: dict[str,
     )
 
     try:
-        response = client.models.generate_content(
-            model=MODEL, # Low-cost, fast model for gatekeeping
-            contents=user_payload,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                response_mime_type="application/json",
-                response_schema=CompatibilityResult,
-                temperature=0.1
-            ),
+        response_text = generate_json(
+            user_payload,
+            system_instruction=system_instruction,
+            schema=CompatibilityResult,
+            schema_name="CompatibilityResult",
+            temperature=0.1,
         )
         
         # Parse against pydantic schema to validate structural integrity
         try:
-            validated_data = CompatibilityResult.model_validate_json(response.text)
+            validated_data = CompatibilityResult.model_validate_json(response_text)
             res_val = validated_data.result
             reason_val = validated_data.reason
         except Exception:
-            parsed_raw = json.loads(response.text)
+            parsed_raw = json.loads(response_text)
             res_val = parsed_raw.get("result", parsed_raw.get("compatible", True))
             reason_val = parsed_raw.get("reason", "Compatibility check completed.")
 

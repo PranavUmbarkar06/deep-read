@@ -3,6 +3,7 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from structures.agent_state import Paper, AgentState
 from tools import find_papers, extract
+from langgraph.checkpoint.memory import MemorySaver
 from graph_wrapper import (
     orchestrator,
     set_papers,
@@ -63,7 +64,7 @@ def build_graph():
             "summarize": "check_pdf_input_node",
             "discover": "set_papers",
             "compare": "compare_router_node",
-            "validate": "set_papers"
+            "validate": "set_papers" #problem problem
         }
     )
 
@@ -141,37 +142,52 @@ def build_graph():
     builder.add_edge("compare_papers", "summarize_comparison")
     builder.add_edge("summarize_comparison", END)
 
-    return builder.compile()
+    checkpointer = MemorySaver()
+    return builder.compile(checkpointer=checkpointer)
+    
 
 
 
 
 if __name__ == "__main__":
-
     graph = build_graph()
-
-
-
-    result = graph.invoke({
-
-        "query": "can you compare a few optimisation algorithms like ga,pso and aco?"
-
-    })
-
-
-
     
+    # Thread ID tracks the state for a specific user session
+    config = {"configurable": {"thread_id": "test_session_101"}}
 
-    print(result)
-
-
-
-    # # draw_mermaid_png() calls out to mermaid.ink to render -- fine on your machine,
-
-    # # but not reachable from a sandboxed/offline environment. draw_mermaid() needs
-
-    # # no network call; paste the output into mermaid.live or a .md file to view it.
-
-    # print("\n--- mermaid source ---")
-
+    print("==========================================")
+    print("STEP 1: User requests comparison without uploading PDFs")
+    print("==========================================")
     
+    initial_input = {
+        "query": "Compare these papers for me",
+        "pdf_paths": []  # Empty array triggers ask_upload routing
+    }
+    
+    # Run graph - expected to stop after ask_compare_upload
+    res1 = graph.invoke(initial_input, config)
+    
+    # Verify current state
+    current_state = graph.get_state(config)
+    print("\n[State Check after Step 1]:")
+    print(f"Next Nodes to Execute: {current_state.next}")  # Should be empty or pointing to next pending step
+    print(f"Current Intent: {current_state.values.get('intent')}")
+
+    print("\n==========================================")
+    print("STEP 2: User provides PDF paths and resumes execution")
+    print("==========================================")
+
+    # Update state with the uploaded files as if user attached them
+    graph.update_state(
+        config,
+        {
+            "pdf_paths": ["downloaded_papers/paper1.pdf", "downloaded_papers/paper2.pdf"],
+            "intent": "compare" # Keep intent persistent
+        }
+    )
+
+    # Passing None re-invokes the graph from where it paused
+    final_result = graph.invoke(None, config)
+
+    print("\n[Final Output]:")
+    print(final_result)

@@ -4,9 +4,8 @@ from langchain_core.tools import tool
 from typing import Literal, TypedDict, List, Optional
 from pydantic import BaseModel, Field
 import os
-from google import genai
-from google.genai import types
 from langgraph.types import interrupt
+from tools.azure_openai_client import generate_model, generate_text
 
 from dotenv import load_dotenv
 
@@ -57,7 +56,7 @@ Your task is to classify the incoming user query into exactly ONE of the followi
 # ---------------------------------------------------------------------------
 def orchestrator(state: AgentState) -> dict:
     """
-    Classifies user intent for research paper processing using Gemini.
+    Classifies user intent for research paper processing using Azure OpenAI.
     Returns a state update dictionary containing the detected intent and reasoning.
     """
     query = state.get("query", "")
@@ -70,23 +69,13 @@ def orchestrator(state: AgentState) -> dict:
     else:
         context_str += "Attached Files/Papers: None\n"
 
-    # Initialize Gemini client
-    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
     try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",  # Update to target Flash model identifier
-            contents=context_str,
-            config=types.GenerateContentConfig(
-                system_instruction=ORCHESTRATOR_SYSTEM_PROMPT,
-                response_mime_type="application/json",
-                response_schema=OrchestratorDecision,
-                temperature=0.0,  # Zero temperature for deterministic classification
-            ),
+        decision = generate_model(
+            context_str,
+            OrchestratorDecision,
+            system_instruction=ORCHESTRATOR_SYSTEM_PROMPT,
+            temperature=0.0,
         )
-
-        # Parse structured output
-        decision: OrchestratorDecision = response.parsed
         
         print(f"[orchestrator] Query: {query!r} -> Intent: {decision.intent} ({decision.reasoning})")
         
@@ -277,8 +266,6 @@ def summarise_paper_node(state: AgentState) -> dict:
     paper_text = state["paper_text"]
     feedback = state.get("feedback", [])
 
-    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-    
     prompt = f"""
     You are an elite research scientist reviewing an academic paper. 
     Your job is to read the following text and synthesize its true intent, methodology, and outcome.
@@ -308,15 +295,9 @@ def summarise_paper_node(state: AgentState) -> dict:
     Take this feedback into account when summarizing the paper: {feedback}
     """
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            temperature=0.1,
-        )
-    )
+    summary = generate_text(prompt, temperature=0.1)
     return {
-        "current_summary": response.text,
+        "current_summary": summary,
         "iteration": state.get("iteration", 0) + 1
     }
 
@@ -468,19 +449,24 @@ def validate_and_query(state: AgentState) -> dict:
 
     # Index papers
     for paper in pdf_paths:
-        # Note: pass both pdf path and a title/identifier if required by add_paper
-        agent.add_paper(paper, paper_title=paper)
+        if os.path.exists(paper):
+            filename = os.path.basename(paper)
+            agent.add_paper(paper, paper_title=filename)
 
     # Run validation step
     analysis: validator.HypothesisAnalysis = agent.validate_hypothesis(
         session_id=session_id, hypothesis=query
     )
 
+    formatted_md = validator.format_analysis_markdown(analysis)
+
     return {
-        "validate_result": analysis.model_dump(),  # Convert Pydantic model to dict
+        "validate_result": analysis.model_dump(),
+        "final_message": formatted_md,
         "session_id": session_id,
         "query": query,
     }
+
 
 
 if __name__ == '__main__':

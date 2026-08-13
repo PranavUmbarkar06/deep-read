@@ -1,14 +1,12 @@
 import os
 from pypdf import PdfReader
-from google import genai
-from google.genai import types
 from dotenv import load_dotenv
 from extract import extract_text_from_pdf
 import logger
 from critic import evaluate_summary
+from azure_openai_client import generate_text
 
 load_dotenv()
-MODEL=os.getenv("MODEL", "gemini-2.5-flash")  # Default to gemini-2.5-flash if not set
 def summarise(pdf_path: str,feedback: list=None,max_iterations:int=1) -> str:
 
     """
@@ -23,8 +21,6 @@ def summarise(pdf_path: str,feedback: list=None,max_iterations:int=1) -> str:
     
     paper_text=extract_text_from_pdf(pdf_path)
 
-    # 3. Initialize the Google GenAI client
-    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
     feedback=[]
     # 4. Prompt optimized for extracting core scientific intent
     while max_iterations>=0:
@@ -59,20 +55,14 @@ def summarise(pdf_path: str,feedback: list=None,max_iterations:int=1) -> str:
         Take this feedback into account when summarizing the paper: {feedback}
         """
 
-        # 5. Execute the call using gemini-2.5-flash
-        response = client.models.generate_content(
-            model=MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.1,  # Keeps the model strictly factual
-            )
-        )
+        # 5. Execute the call using Azure OpenAI
+        summary = generate_text(prompt, temperature=0.1)
         print("Summary generated successfully.")
-        print(response.text)
-        logger.log("Summarised paper", f"PDF Path: '{pdf_path}', Summary : {response.text}")
+        print(summary)
+        logger.log("Summarised paper", f"PDF Path: '{pdf_path}', Summary : {summary}")
         if(max_iterations>0):
-            feedback=evaluate_summary(paper_text,response.text)['feedback']
-    return response.text
+            feedback=evaluate_summary(paper_text,summary)['feedback']
+    return summary
 
 if __name__ == "__main__":
     pdf_path = "../downloaded_papers/test.pdf"  # Replace with your PDF path

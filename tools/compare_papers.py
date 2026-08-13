@@ -1,15 +1,10 @@
 # compare_papers.py
 import json
 import os
-from google import genai
-from google.genai import types
 from pypdf import PdfReader
 from .compatibility import verify_papers_compatibility
 from .extract import extract_text_from_pdf
-
-# Initialize client (picks up GEMINI_API_KEY from environment variables)
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL=os.getenv("MODEL", "gemini-2.5-flash")  # Default to gemini-2.5-flash if not set
+from .azure_openai_client import generate_text
 
 
 def compare_research_papers(pdf_paths: list[str]) -> str:
@@ -28,7 +23,7 @@ def compare_research_papers(pdf_paths: list[str]) -> str:
         full_text_payload += f"=========================================\n"
         full_text_payload += extract_text_from_pdf(path) + "\n"
 
-    # 4. Synthesize with a high-fidelity model capable of processing heavy context
+    # 4. Synthesize with Azure OpenAI.
     system_instruction = (
         "You are an expert technical reviewer and research lead. Your task is to generate "
         "a highly professional, objective Markdown comparison matrix comparing the provided papers.\n\n"
@@ -41,17 +36,13 @@ def compare_research_papers(pdf_paths: list[str]) -> str:
         "3. Provide brief, dense insights rather than vague summaries. Keep the language direct and high-impact."
     )
 
-    print("Generating comprehensive comparison matrix via Gemini 2.5 Pro...")
+    print("Generating comprehensive comparison matrix via Azure OpenAI...")
     try:
-        response = client.models.generate_content(
-            model=MODEL, # Deep reasoning architecture for massive context matching
-            contents=f"Execute a deep comparative analysis on these documents:\n\n{full_text_payload}",
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0.2
-            ),
+        return generate_text(
+            f"Execute a deep comparative analysis on these documents:\n\n{full_text_payload}",
+            system_instruction=system_instruction,
+            temperature=0.2,
         )
-        return response.text
 
     except Exception as e:
         return f"Pipeline failed during matrix generation: {str(e)}"

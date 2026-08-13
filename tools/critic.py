@@ -1,16 +1,11 @@
 import json
 import os
-from google import genai
-from google.genai import types
+from .azure_openai_client import generate_json
 
 #import logger
 
-MODEL=os.getenv("MODEL", "gemini-2.5-flash")  # Default to gemini-2.5-flash if not set
 # Simple evaluation wrapper
 def evaluate_summary(source_text: str, summary_text: str) -> dict:
-    # Initialize client (picks up GEMINI_API_KEY from environment)
-    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-    
     prompt = f"""
     You are an expert editor evaluating a summary against its source text.
     
@@ -36,16 +31,9 @@ def evaluate_summary(source_text: str, summary_text: str) -> dict:
     }}
     """
     
-    response = client.models.generate_content(
-        model=MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.1 # Low temperature for more deterministic, factual evaluation
-        )
-    )
+    response_text = generate_json(prompt, temperature=0.1)
     #logger.log("Evaluated summary", f"Source Text Length: {len(source_text)} characters, Summary Length: {len(summary_text)} characters, Evaluation Result: {json.loads(response.text)['feedback']}")
-    return json.loads(response.text)
+    return json.loads(response_text)
 
 # Example Usage
 if __name__ == "__main__":

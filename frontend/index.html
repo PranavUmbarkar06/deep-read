@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deep Read — Autonomous Research Agent</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;900&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="paper-theme">
+  <div class="app-container">
+    <main class="main-content">
+
+      <!-- Top Header -->
+      <header class="top-header">
+        <div class="header-left">
+          <span class="wordmark-sm">DeepRead</span>
+          <span class="active-intent-badge hidden" id="active-intent-badge">
+            <span id="intent-text">Auto</span>
+          </span>
+        </div>
+
+        <div class="header-actions">
+          <div class="status-indicator">
+            <span class="dot pulse"></span>
+            <span>Online</span>
+          </div>
+
+          <button class="header-btn" id="btn-docs-toggle">
+            <i class="fa-solid fa-paperclip"></i> Papers <span class="doc-count-badge" id="doc-count">0</span>
+          </button>
+          <button class="header-btn" id="btn-clear-chat"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+        </div>
+
+        <!-- Documents Popover -->
+        <div class="docs-popover hidden frame-marks" id="docs-popover">
+          <span class="corner tl"></span><span class="corner tr"></span>
+          <span class="corner bl"></span><span class="corner br"></span>
+
+          <div class="popover-header">
+            <span class="eyebrow">Uploaded Papers</span>
+            <button class="modal-close" id="btn-docs-close"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+
+          <div class="upload-dropzone" id="dropzone">
+            <input type="file" id="file-input" multiple accept=".pdf" class="file-input-hidden">
+            <div class="dropzone-content">
+              <i class="fa-solid fa-arrow-up-from-line upload-icon"></i>
+              <p class="dropzone-text">Drop PDF papers here</p>
+              <span class="dropzone-sub">or <button type="button" class="btn-browse" id="btn-browse">browse files</button></span>
+            </div>
+            <div class="upload-progress" id="upload-progress">
+              <div class="progress-bar-fill" id="progress-bar-fill"></div>
+            </div>
+          </div>
+
+          <div class="doc-list" id="doc-list">
+            <div class="doc-empty-state" id="doc-empty">
+              <p>No papers uploaded yet</p>
+              <span>Add PDFs to summarize or compare</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Chat Viewport -->
+      <div class="chat-viewport" id="chat-viewport">
+
+        <div class="welcome-hero" id="welcome-hero">
+          <div class="hero-mark frame-marks">
+            <span class="corner tl"></span><span class="corner tr"></span>
+            <span class="corner bl"></span><span class="corner br"></span>
+            <span class="eyebrow">Deep Read — 2026</span>
+            <h2 class="hero-wordmark">Read deeper.<br><em>Reason further.</em></h2>
+          </div>
+          <p class="hero-sub">Discover papers on arXiv, generate structured summaries, run technical comparisons, and validate claims against the literature — all from one conversation.</p>
+
+          <div class="hero-grid">
+            <button class="hero-card" onclick="useSampleQuery('Find papers on Transformer attention optimization')">
+              <span class="hero-card-index">01</span>
+              <h3>Discover Literature</h3>
+              <p>Search arXiv with automatic relevance ranking</p>
+            </button>
+            <button class="hero-card" onclick="useSampleQuery('Summarize the key findings and limitations of the paper')">
+              <span class="hero-card-index">02</span>
+              <h3>Synthesize Papers</h3>
+              <p>Extract intent, method, results & critique from a PDF</p>
+            </button>
+            <button class="hero-card" onclick="useSampleQuery('Compare the two uploaded papers in a deep comparison matrix')">
+              <span class="hero-card-index">03</span>
+              <h3>Compare Pipelines</h3>
+              <p>Run a gatecheck and map technical tradeoffs</p>
+            </button>
+            <button class="hero-card" onclick="useSampleQuery('Validate if the mathematical proof in this paper holds up')">
+              <span class="hero-card-index">04</span>
+              <h3>Validate Claims</h3>
+              <p>Fact-check hypotheses against indexed literature</p>
+            </button>
+          </div>
+        </div>
+
+        <div class="chat-messages" id="chat-messages"></div>
+      </div>
+
+      <div class="attached-bar hidden" id="attached-bar">
+        <span class="attached-label">Active for query</span>
+        <div class="attached-tags" id="attached-tags"></div>
+        <button class="btn-clear-attached" id="btn-clear-attached"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="input-container">
+        <form id="chat-form" class="chat-form">
+          <button type="button" class="input-btn btn-attach" id="btn-attach" title="Upload PDF">
+            <i class="fa-solid fa-paperclip"></i>
+          </button>
+          <div class="input-wrapper">
+            <textarea
+              id="user-input"
+              placeholder="Ask Deep Read to find papers, summarize a PDF, or run a comparison…"
+              rows="1"
+              required
+            ></textarea>
+          </div>
+          <button type="submit" class="input-btn btn-send" id="btn-send" title="Send">
+            <span class="send-cursor" aria-hidden="true"></span>
+          </button>
+        </form>
+        <div class="input-footer">
+          <span>Deep Read Agentic AI &middot; Upload 2+ PDFs to compare papers directly</span>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Document Preview Modal -->
+  <div class="modal-backdrop hidden" id="doc-modal">
+    <div class="modal-content frame-marks">
+      <span class="corner tl"></span><span class="corner tr"></span>
+      <span class="corner bl"></span><span class="corner br"></span>
+      <div class="modal-header">
+        <div class="modal-title">
+          <h3 id="modal-doc-title">Document Title</h3>
+        </div>
+        <button class="modal-close" id="modal-close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="doc-meta-grid">
+          <div class="meta-item"><span class="meta-label">File Name</span><span class="meta-val" id="modal-doc-name">—</span></div>
+          <div class="meta-item"><span class="meta-label">File Size</span><span class="meta-val" id="modal-doc-size">—</span></div>
+          <div class="meta-item"><span class="meta-label">Page Count</span><span class="meta-val" id="modal-doc-pages">—</span></div>
+          <div class="meta-item"><span class="meta-label">Local Path</span><span class="meta-val code-font" id="modal-doc-path">—</span></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="modal-btn-summarize">Summarize this paper</button>
+        <button class="btn-danger" id="modal-btn-delete">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

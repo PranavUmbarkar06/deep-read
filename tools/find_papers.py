@@ -1,13 +1,11 @@
 import json
 import arxiv
 from typing import List, Dict
-from google import genai
 import os
 from dotenv import load_dotenv
+from .azure_openai_client import generate_json
 
 load_dotenv()
-# Initialize the Gemini API client
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 def find_keywords(user_query: str) -> list[str]:
     """
@@ -19,18 +17,30 @@ def find_keywords(user_query: str) -> list[str]:
     Generate a JSON list containing 10 to 15 precise academic keywords, subtopics, 
     or search phrases suitable for querying arXiv.
     
-    Return ONLY a JSON array of strings, like this:
-    ["keyword 1", "keyword 2", "keyword 3"]
+    Return ONLY a JSON object like this:
+    {"keywords": ["keyword 1", "keyword 2", "keyword 3"]}
     """
 
-    response = client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=prompt,
-        config={'response_mime_type': 'application/json'}
+    response_text = generate_json(
+        prompt,
+        schema={
+            "type": "object",
+            "properties": {
+                "keywords": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                }
+            },
+            "required": ["keywords"],
+            "additionalProperties": False,
+        },
+        schema_name="ArxivKeywords",
+        temperature=0.1,
     )
 
     try:
-        keywords = json.loads(response.text)
+        payload = json.loads(response_text)
+        keywords = payload.get("keywords", payload)
         if isinstance(keywords, list):
             if user_query not in keywords:
                 keywords.insert(0, user_query)
@@ -70,7 +80,7 @@ def fetch_papers(keywords: list[str], max_papers_per_keyword: int = 1) -> list[a
         except Exception as e:
             print(f"Error searching arXiv for keyword '{clean_kw}': {e}")
 
-    return raw_results
+    return raw_results[:5]
 
 
 import urllib.request
@@ -105,7 +115,7 @@ def download_paper_pdf(result: arxiv.Result, save_dir: str) -> str:
 if __name__ == "__main__":
     query = "How do we make Large Language Models more efficient for edge devices?"
     
-    # Step 1: Get 10-15 keywords from Gemini
+    # Step 1: Get 10-15 keywords from Azure OpenAI
     print("Generating keywords...")
     keywords = find_keywords(query)
     print(f"\nGenerated {len(keywords)} Keywords:")

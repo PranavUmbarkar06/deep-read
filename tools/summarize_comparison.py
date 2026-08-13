@@ -1,8 +1,7 @@
 import json
 from pydantic import BaseModel, Field
-from google.genai import types
-from google import genai
 import os
+from .azure_openai_client import generate_json
 
 from dotenv import load_dotenv
 
@@ -24,7 +23,6 @@ def summarize_comparison_matrix(comparison_matrix_text: str) -> str:
     Ingests the generated Markdown comparison matrix text and returns a clean, 
     structured executive summary JSON string.
     """
-    client=genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
     # Guard against invalid or error inputs
     if not comparison_matrix_text or "Pipeline failed" in comparison_matrix_text:
         return json.dumps({
@@ -38,19 +36,16 @@ def summarize_comparison_matrix(comparison_matrix_text: str) -> str:
     )
 
     try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=f"Summarize this detailed research paper comparison matrix:\n\n{comparison_matrix_text}",
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                response_mime_type="application/json",
-                response_schema=ComparisonSummaryResult,
-                temperature=0.1
-            ),
+        response_text = generate_json(
+            f"Summarize this detailed research paper comparison matrix:\n\n{comparison_matrix_text}",
+            system_instruction=system_instruction,
+            schema=ComparisonSummaryResult,
+            schema_name="ComparisonSummaryResult",
+            temperature=0.1,
         )
 
         # Validate structured output against Pydantic model
-        validated_summary = ComparisonSummaryResult.model_validate_json(response.text)
+        validated_summary = ComparisonSummaryResult.model_validate_json(response_text)
 
         return json.dumps(validated_summary.model_dump(), indent=2)
 
