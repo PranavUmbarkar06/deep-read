@@ -17,6 +17,7 @@ from graph_wrapper import (
     check_pdf_input,
     evaluate_critic_result,
     compare_router,
+    ask_compare_upload_node,
     summarize_comparison_node,
     compare_papers_node,
     compatibility_node,
@@ -40,6 +41,7 @@ def build_graph():
     builder.add_node("check_pdf_input_node", lambda state: state)
     
     # Registered comparison pipeline nodes
+    builder.add_node("ask_compare_upload", ask_compare_upload_node)
     builder.add_node("check_compatibility", compatibility_node)
     builder.add_node("compare_papers", compare_papers_node)
     builder.add_node("summarize_comparison", summarize_comparison_node)
@@ -70,10 +72,12 @@ def build_graph():
         "compare_router_node",
         compare_router,
         {
-            "search": "set_papers",
-            "uploaded": "check_compatibility",  # Directed to compatibility check
+            "ask_upload": "ask_compare_upload",
+            "uploaded": "check_compatibility"  # Directed to compatibility check
         }
     )
+    builder.add_edge("ask_compare_upload", END)
+
 
     # 5. Set Papers Routing
     builder.add_conditional_edges(

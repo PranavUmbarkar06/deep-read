@@ -394,9 +394,16 @@ def evaluate_critic_result(state: AgentState) -> str:
 
 def compare_router(state: dict) -> str:
     pdf_paths = state.get("pdf_paths") or []
-    if len(pdf_paths) <= 1:
-        return "search"
-    return "uploaded"
+    if len(pdf_paths) >= 2:
+        return "uploaded"
+    return "ask_upload"
+
+def ask_compare_upload_node(state: AgentState) -> dict:
+    """Returns a notice when user attempts to compare without uploading at least 2 PDFs."""
+    return {
+        "final_message": "Paper comparison requires at least 2 uploaded PDF research papers. Please upload your PDF files using the document uploader to generate a comparative analysis."
+    }
+
 
 import json
 
